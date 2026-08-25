@@ -71,7 +71,9 @@ and deletes `runners/<name>/`.
 
 Each dind sidecar keeps its own image cache; the shared `registry-mirror`
 service (Docker Hub pull-through cache) means only the first runner to pull
-an image hits the internet. Prune per-runner caches on a cron:
+an image hits the internet. Prune per-runner caches on a schedule — on Linux
+use cron via `install-cron.sh`, on macOS use launchd via `install-launchd.sh`
+(see "Running on macOS" below). Either installs the hourly job:
 
 ```
 0 * * * * /root/development/github-runner/prune-dind.sh >> /var/log/prune-github-runner.log 2>&1
@@ -80,6 +82,13 @@ an image hits the internet. Prune per-runner caches on a cron:
 `prune-dind.sh` discovers all `github-dind-*` containers dynamically, so it
 doesn't need updating as runners are added/removed. The registry-mirror
 volume is never pruned — it's the long-lived shared cache.
+
+By default `prune-dind.sh` also runs a host-level `docker system prune -af`
+after the sidecars — fine on a dedicated runner host, but on a machine you
+also develop on it wipes images/build cache/networks from unrelated projects.
+Pass `--dind-only` to prune just the `github-dind-*` sidecar caches and skip
+the host-level prune. `install-launchd.sh` uses `--dind-only` for exactly
+this reason.
 
 ## Why Docker instead of a bare-metal install
 
@@ -111,11 +120,23 @@ cp .env.example .env && vim .env   # set your PAT(s)
 Clone this repo directly on the Mac — not the `development` parent repo,
 since nothing else there is relevant on a laptop.
 
-**Cron caveat:** `install-cron.sh` uses `crontab`, which macOS still ships,
-but modern macOS (Ventura+) restricts background `cron` execution unless
-Terminal (or whatever app runs the script) is granted **Full Disk Access**
-in System Settings → Privacy & Security. If the hourly prune silently
-doesn't run, check that first.
+**Hourly prune on macOS — use launchd, not cron.** Modern macOS (Ventura+)
+restricts background `cron` execution unless Terminal (or whatever app runs
+the script) is granted **Full Disk Access** in System Settings → Privacy &
+Security, so `install-cron.sh` will silently not run. Use the launchd
+installer instead:
+
+```
+./install-launchd.sh            # install + load the hourly agent
+./install-launchd.sh --remove   # unload + delete it
+```
+
+It installs a per-user LaunchAgent (`com.github-runner.prune-dind`,
+`~/Library/LaunchAgents/`) that runs `prune-dind.sh --dind-only` hourly,
+logging to `~/Library/Logs/prune-github-runner.log`. No root, no Full Disk
+Access needed. Because launchd gives jobs a minimal `PATH`, the installer
+bakes Docker Desktop's `docker` location into the agent's `PATH`. Test a run
+immediately with `launchctl kickstart -p gui/$(id -u)/com.github-runner.prune-dind`.
 
 ## Why no job-container DNS workaround (unlike Gitea)
 
