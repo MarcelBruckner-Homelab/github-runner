@@ -6,6 +6,10 @@
 #   ./register.sh --scope org  --org  <ORG_NAME>       --name <runner-name> --labels linux,docker,builder
 #   ./register.sh --scope repo --repo <owner>/<repo>   --name <runner-name> --labels linux,docker,builder
 #
+#   The final runner name is auto-prefixed with this machine's hostname
+#   (e.g. --name traureise-01 on host "beelink-ser5-max" registers as
+#   "beelink-ser5-max-traureise-01"), so names stay unique across machines.
+#
 # Optional flags:
 #   --pat-name <VAR>  name of the .env variable holding the PAT (default: GH_PAT)
 #                      use this to pick between multiple stored PATs, one per org/owner
@@ -54,6 +58,9 @@ done
 [[ -z "$name" ]] && { echo "Missing --name <runner-name>" >&2; exit 1; }
 [[ -z "$labels" ]] && { echo "Missing --labels a,b,c" >&2; exit 1; }
 [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "--name must contain only letters, digits, - and _" >&2; exit 1; }
+
+hostname_slug="$(hostname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed -E 's/-+/-/g; s/^-+//; s/-+$//')"
+[[ -n "$hostname_slug" ]] && name="${hostname_slug}-${name}"
 
 case "$scope" in
   org)  [[ -z "$org" ]] && { echo "Missing --org <ORG_NAME> for --scope org" >&2; exit 1; } ;;

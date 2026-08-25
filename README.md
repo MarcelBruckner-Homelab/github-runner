@@ -38,6 +38,10 @@ GH_PAT_TRAUREISE=...       # Traureise
 ./register.sh --scope repo --repo Traureise/traureise --name traureise-01 --labels linux,docker,builder --pat-name GH_PAT_TRAUREISE
 ```
 
+The registered name is auto-prefixed with this machine's hostname (e.g.
+`--name traureise-01` becomes `beelink-ser5-max-traureise-01` on that
+host), so the same `--name` can be reused safely across machines.
+
 `--pat-name` defaults to `GH_PAT`; pass it whenever the target org/owner
 needs a different stored token. This checks the PAT against the GitHub API,
 then creates `runners/<name>/` (compose file + env file, both gitignored —
@@ -87,6 +91,29 @@ bare-metal systemd install because:
   lifecycle, same registry-mirror/prune pattern)
 - it avoids putting the runner user in the host's `docker` group — DinD
   sidecar isolation means the runner container never touches the host socket
+
+## Running on macOS
+
+Works unmodified via Docker Desktop — `docker:27-dind` (privileged) and
+`myoung34/github-runner` both run fine inside Docker Desktop's Linux VM,
+and `register.sh` only needs `bash`/`curl`, both present on macOS.
+
+```
+brew install --cask docker   # if Docker Desktop isn't already installed
+git clone git@github.com:MarcelBruckner-Homelab/github-runner.git
+cd github-runner
+cp .env.example .env && vim .env   # set your PAT(s)
+./register.sh --scope org --org <ORG_NAME> --name <runner-name> --labels docker
+```
+
+Clone this repo directly on the Mac — not the `development` parent repo,
+since nothing else there is relevant on a laptop.
+
+**Cron caveat:** `install-cron.sh` uses `crontab`, which macOS still ships,
+but modern macOS (Ventura+) restricts background `cron` execution unless
+Terminal (or whatever app runs the script) is granted **Full Disk Access**
+in System Settings → Privacy & Security. If the hourly prune silently
+doesn't run, check that first.
 
 ## Why no job-container DNS workaround (unlike Gitea)
 
