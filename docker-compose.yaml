@@ -1,0 +1,19 @@
+services:
+  registry-mirror:
+    image: registry:2
+    container_name: github-runner-registry-mirror
+    restart: unless-stopped
+    environment:
+      REGISTRY_PROXY_REMOTEURL: https://registry-1.docker.io
+    volumes:
+      - registry-mirror-data:/var/lib/registry
+    networks:
+      - github_runner_network
+
+networks:
+  github_runner_network:
+    driver: bridge
+    name: github_runner_network
+
+volumes:
+  registry-mirror-data:
