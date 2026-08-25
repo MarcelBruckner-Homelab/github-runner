@@ -7,8 +7,7 @@
 # its own process rather than spawning a separate "job container" with its own
 # Docker client. So DOCKER_HOST here is all that's needed; there's no
 # network/DNS workaround required for `services:` containers the way there is
-# for act_runner (see gitea/dind-proxmox-lxc.md in the development repo:
-# https://github.com/MarcelBruckner-Homelab/development/blob/main/gitea/dind-proxmox-lxc.md).
+# for act_runner.
 services:
   dind:
     image: docker:27-dind

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # register.sh — add one new GitHub Actions self-hosted runner (DinD-isolated,
-# capacity 1) to this host, following the same pattern as the Gitea runners.
+# capacity 1) to this host, using a Docker-in-Docker sidecar per runner.
 #
 # Usage:
-#   ./register.sh --scope org  --org  <ORG_NAME>       --name <runner-name> --labels linux,docker,builder
-#   ./register.sh --scope repo --repo <owner>/<repo>   --name <runner-name> --labels linux,docker,builder
+#   ./register.sh --scope org  --org  <ORG_NAME>       --name <runner-name> --labels docker
+#   ./register.sh --scope repo --repo <owner>/<repo>   --name <runner-name> --labels docker
 #
 #   The final runner name is auto-prefixed with this machine's hostname
-#   (e.g. --name traureise-01 on host "beelink-ser5-max" registers as
-#   "beelink-ser5-max-traureise-01"), so names stay unique across machines.
+#   (e.g. --name builder-01 on host "my-host" registers as
+#   "my-host-builder-01"), so names stay unique across machines.
 #
 # Optional flags:
 #   --pat-name <VAR>  name of the .env variable holding the PAT (default: GH_PAT)
@@ -19,8 +19,8 @@
 #
 # Requires a GitHub PAT in ./.env (see .env.example), one variable per org/owner
 # you register against, e.g.:
-#   GH_PAT=...                for the default org
-#   GH_PAT_TRAUREISE=...      for Traureise, passed via --pat-name GH_PAT_TRAUREISE
+#   GH_PAT=...                for the default org/owner
+#   GH_PAT_MYORG=...          for another org/owner, via --pat-name GH_PAT_MYORG
 # Each PAT needs:
 #   org scope:  Organization permissions -> Self-hosted runners: Read and write
 #   repo scope: Repository permissions   -> Administration: Read and write
