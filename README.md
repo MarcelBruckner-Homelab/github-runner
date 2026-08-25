@@ -43,6 +43,12 @@ The registered name is auto-prefixed with this machine's hostname (e.g.
 `--name builder-01` becomes `my-host-builder-01` on a host named `my-host`),
 so the same `--name` can be reused safely across machines.
 
+**One label is enough.** GitHub auto-adds `self-hosted`, the OS (`Linux`), and
+the arch (`X64`) to every runner. Since every runner in this stack is built
+identically (same image, same DinD sidecar), one custom label — `docker` — is
+all you need to target it; extra labels like `linux`/`builder` add no
+selectivity over the auto labels.
+
 `--pat-name` defaults to `GH_PAT`; pass it whenever the target org/owner
 needs a different stored token. This checks the PAT against the GitHub API,
 then creates `runners/<name>/` (compose file + env file, both gitignored —
@@ -65,6 +71,26 @@ each additional runner.
 
 Stops the pair (the runner de-registers from GitHub on graceful shutdown)
 and deletes `runners/<name>/`.
+
+## Ephemeral vs persistent runners (the EPHEMERAL gotcha)
+
+Pass `--ephemeral` to `register.sh` for a runner that de-registers after one
+job — worth it for anything that might see untrusted/fork-PR code. It
+self-sustains via `restart: unless-stopped`: the runner process exits after a
+job, the container restarts, and the entrypoint re-registers fresh with
+`--replace`. Note the `dind` sidecar is *not* recycled on that cycle — only the
+runner container restarts — so a job's Docker layers can still be visible to
+the next job on the same daemon even with `--ephemeral`.
+
+**The gotcha:** `myoung34/github-runner`'s entrypoint checks `-n "$EPHEMERAL"`
+— i.e. *is the variable set to anything* — not its value. So `EPHEMERAL=false`
+(a non-empty string) still passes `--ephemeral`, silently self-destructing
+every runner after its first job. A **persistent** runner needs the variable
+left **empty**, which is why the generated `.env` and the compose template's
+`${EPHEMERAL:-}` default both leave it blank rather than `false`. (`${VAR:-default}`
+substitutes the default for an *empty* value too, not just an unset one — so a
+stale per-runner compose file copied before this was fixed must be refreshed
+from the template, not just have its `.env` edited.)
 
 ## Disk management
 
