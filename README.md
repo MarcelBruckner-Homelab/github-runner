@@ -1,9 +1,11 @@
 # github-runner
 
 Self-hosted GitHub Actions runners, one DinD-isolated slot per runner —
-same pattern as `../gitea`'s Actions runners, but registered against
-GitHub instead of Gitea. Independent stack: own network, own registry
-mirror, no shared state with Gitea.
+same pattern as the [Gitea Actions runners](https://github.com/MarcelBruckner-Homelab/development/tree/main/gitea)
+in the `development` repo, but registered against GitHub instead of Gitea.
+Independent stack: own network, own registry mirror, no shared state with
+Gitea, and no dependency on that repo — this one's meant to be checked out
+on its own (e.g. on a Mac).
 
 Each runner = one `dind-<name>` + `runner-<name>` container pair, capacity 1.
 Concurrency comes from adding more runners, not raising capacity on one —
@@ -119,7 +121,9 @@ doesn't run, check that first.
 
 Gitea's `act_runner` spawns a *separate* container per job with its own
 Docker client, which is why that setup needs `network: ""` +
-`host.docker.internal` gymnastics (see `../gitea/dind-proxmox-lxc.md`).
+`host.docker.internal` gymnastics — see
+[`gitea/dind-proxmox-lxc.md`](https://github.com/MarcelBruckner-Homelab/development/blob/main/gitea/dind-proxmox-lxc.md)
+in the `development` repo for the full story.
 GitHub's own runner binary runs job steps as its own process and talks to
 Docker directly — `DOCKER_HOST=tcp://dind:2375` on the runner container is
 the only wiring needed; service containers get GitHub's normal per-job
