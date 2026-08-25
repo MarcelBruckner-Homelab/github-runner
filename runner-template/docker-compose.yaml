@@ -1,0 +1,54 @@
+# Template copied verbatim into runners/<name>/docker-compose.yaml by register.sh.
+# All per-runner values come from the sibling .env file (docker compose native
+# variable substitution) — this file itself never needs editing.
+#
+# Docker access: unlike the Gitea/act_runner setup, the GitHub Actions runner
+# binary is the same one GitHub itself runs — it talks to Docker directly as
+# its own process rather than spawning a separate "job container" with its own
+# Docker client. So DOCKER_HOST here is all that's needed; there's no
+# network/DNS workaround required for `services:` containers the way there is
+# for act_runner (see the Gitea DinD note for that story).
+services:
+  dind:
+    image: docker:27-dind
+    container_name: github-dind-${RUNNER_NAME}
+    hostname: dind-${RUNNER_NAME}
+    restart: unless-stopped
+    privileged: true
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false", "--registry-mirror=http://registry-mirror:5000"]
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    networks:
+      - github_runner_network
+
+  runner:
+    image: myoung34/github-runner:latest
+    container_name: github-runner-${RUNNER_NAME}
+    hostname: runner-${RUNNER_NAME}
+    restart: unless-stopped
+    depends_on:
+      dind:
+        condition: service_started
+    environment:
+      ACCESS_TOKEN: ${ACCESS_TOKEN}
+      RUNNER_SCOPE: ${RUNNER_SCOPE}
+      ORG_NAME: ${ORG_NAME:-}
+      REPO_URL: ${REPO_URL:-}
+      RUNNER_NAME: ${RUNNER_NAME}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      LABELS: ${LABELS}
+      RUNNER_WORKDIR: /tmp/runner/work
+      DISABLE_AUTO_UPDATE: "true"
+      START_DOCKER_SERVICE: "false"
+      DOCKER_HOST: tcp://dind:2375
+      # Must default to empty, not "false" — the image checks "-n $EPHEMERAL"
+      # (set to anything = ephemeral), not the value.
+      EPHEMERAL: ${EPHEMERAL:-}
+    volumes:
+      - ./data:/tmp/runner/work
+    networks:
+      - github_runner_network
+
+networks:
+  github_runner_network:
+    external: true
