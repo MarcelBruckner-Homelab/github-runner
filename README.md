@@ -35,9 +35,9 @@ GH_PAT_TRAUREISE=...       # Traureise
 ## Adding a runner
 
 ```
-./register.sh --scope org  --org  <ORG_NAME>      --name builder-01   --labels linux,docker,builder
-./register.sh --scope repo --repo <owner>/<repo>   --name builder-01   --labels linux,docker,builder
-./register.sh --scope repo --repo Traureise/traureise --name traureise-01 --labels linux,docker,builder --pat-name GH_PAT_TRAUREISE
+./register.sh --scope org  --org  <ORG_NAME>      --name builder-01   --labels docker
+./register.sh --scope repo --repo <owner>/<repo>   --name builder-01   --labels docker
+./register.sh --scope repo --repo Traureise/traureise --name traureise-01 --labels docker --pat-name GH_PAT_TRAUREISE
 ```
 
 The registered name is auto-prefixed with this machine's hostname (e.g.

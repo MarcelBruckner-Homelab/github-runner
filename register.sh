@@ -3,8 +3,8 @@
 # capacity 1) to this host, following the same pattern as the Gitea runners.
 #
 # Usage:
-#   ./register.sh --scope org  --org  <ORG_NAME>       --name <runner-name> --labels linux,docker,builder
-#   ./register.sh --scope repo --repo <owner>/<repo>   --name <runner-name> --labels linux,docker,builder
+#   ./register.sh --scope org  --org  <ORG_NAME>       --name <runner-name> --labels docker
+#   ./register.sh --scope repo --repo <owner>/<repo>   --name <runner-name> --labels docker
 #
 #   The final runner name is auto-prefixed with this machine's hostname
 #   (e.g. --name traureise-01 on host "beelink-ser5-max" registers as
