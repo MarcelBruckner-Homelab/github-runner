@@ -1,11 +1,10 @@
 # github-runner
 
 Self-hosted GitHub Actions runners, one DinD-isolated slot per runner —
-same pattern as the [Gitea Actions runners](https://github.com/MarcelBruckner-Homelab/development/tree/main/gitea)
-in the `development` repo, but registered against GitHub instead of Gitea.
-Independent stack: own network, own registry mirror, no shared state with
-Gitea, and no dependency on that repo — this one's meant to be checked out
-on its own (e.g. on a Mac).
+the same Docker-in-Docker sidecar pattern often used for Gitea Actions
+runners, but registered against GitHub instead. Fully standalone stack: own
+network, own registry mirror, no shared state with anything else — meant to
+be checked out on its own (e.g. on a Mac or a home-server VM/LXC).
 
 Each runner = one `dind-<name>` + `runner-<name>` container pair, capacity 1.
 Concurrency comes from adding more runners, not raising capacity on one —
@@ -28,21 +27,21 @@ multiple orgs/owners means storing multiple variables in `.env` — one per
 owner — and telling `register.sh` which one to use with `--pat-name`:
 
 ```
-GH_PAT=...                 # default org
-GH_PAT_TRAUREISE=...       # Traureise
+GH_PAT=...                 # default org/owner
+GH_PAT_MYORG=...           # a second org/owner
 ```
 
 ## Adding a runner
 
 ```
-./register.sh --scope org  --org  <ORG_NAME>      --name builder-01   --labels docker
-./register.sh --scope repo --repo <owner>/<repo>   --name builder-01   --labels docker
-./register.sh --scope repo --repo Traureise/traureise --name traureise-01 --labels docker --pat-name GH_PAT_TRAUREISE
+./register.sh --scope org  --org  <ORG_NAME>       --name builder-01 --labels docker
+./register.sh --scope repo --repo <owner>/<repo>   --name builder-01 --labels docker
+./register.sh --scope repo --repo myorg/myrepo     --name builder-01 --labels docker --pat-name GH_PAT_MYORG
 ```
 
 The registered name is auto-prefixed with this machine's hostname (e.g.
-`--name traureise-01` becomes `beelink-ser5-max-traureise-01` on that
-host), so the same `--name` can be reused safely across machines.
+`--name builder-01` becomes `my-host-builder-01` on a host named `my-host`),
+so the same `--name` can be reused safely across machines.
 
 `--pat-name` defaults to `GH_PAT`; pass it whenever the target org/owner
 needs a different stored token. This checks the PAT against the GitHub API,
@@ -76,7 +75,7 @@ use cron via `install-cron.sh`, on macOS use launchd via `install-launchd.sh`
 (see "Running on macOS" below). Either installs the hourly job:
 
 ```
-0 * * * * /root/development/github-runner/prune-dind.sh >> /var/log/prune-github-runner.log 2>&1
+0 * * * * /path/to/github-runner/prune-dind.sh >> /var/log/prune-github-runner.log 2>&1
 ```
 
 `prune-dind.sh` discovers all `github-dind-*` containers dynamically, so it
@@ -98,8 +97,8 @@ same tarball and additionally exchanges the long-lived PAT for a short-lived
 registration token automatically (org tokens expire in ~1h). Chosen over a
 bare-metal systemd install because:
 
-- it matches the Gitea stack already running on this host (same compose
-  lifecycle, same registry-mirror/prune pattern)
+- a uniform compose lifecycle and a shared registry-mirror/prune pattern
+  across all runners
 - it avoids putting the runner user in the host's `docker` group — DinD
   sidecar isolation means the runner container never touches the host socket
 
@@ -117,8 +116,8 @@ cp .env.example .env && vim .env   # set your PAT(s)
 ./register.sh --scope org --org <ORG_NAME> --name <runner-name> --labels docker
 ```
 
-Clone this repo directly on the Mac — not the `development` parent repo,
-since nothing else there is relevant on a laptop.
+This repo is fully standalone — clone it directly on the Mac; nothing else
+is needed.
 
 **Hourly prune on macOS — use launchd, not cron.** Modern macOS (Ventura+)
 restricts background `cron` execution unless Terminal (or whatever app runs
@@ -142,9 +141,7 @@ immediately with `launchctl kickstart -p gui/$(id -u)/com.github-runner.prune-di
 
 Gitea's `act_runner` spawns a *separate* container per job with its own
 Docker client, which is why that setup needs `network: ""` +
-`host.docker.internal` gymnastics — see
-[`gitea/dind-proxmox-lxc.md`](https://github.com/MarcelBruckner-Homelab/development/blob/main/gitea/dind-proxmox-lxc.md)
-in the `development` repo for the full story.
+`host.docker.internal` gymnastics to reach the DinD daemon.
 GitHub's own runner binary runs job steps as its own process and talks to
 Docker directly — `DOCKER_HOST=tcp://dind:2375` on the runner container is
 the only wiring needed; service containers get GitHub's normal per-job
