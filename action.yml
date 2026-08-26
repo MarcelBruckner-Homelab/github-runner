@@ -1,0 +1,128 @@
+name: 'Self-Hosted Runner Selector'
+description: >-
+  Pick a self-hosted runner when a matching one is online and fall back to a
+  GitHub-hosted runner when none are — instead of queuing for up to 24h against
+  an offline runner. Outputs a ready-to-use `runs-on` value.
+author: 'Marcel Bruckner'
+
+branding:
+  icon: 'shuffle'
+  color: 'blue'
+
+inputs:
+  token:
+    description: >-
+      A PAT that can read runner status: Self-hosted runners:read for org
+      runners, or Administration:read for repository runners.
+    required: true
+  primary-labels:
+    description: >-
+      Comma-separated labels of the self-hosted runner to prefer. A runner must
+      carry ALL of them to count as available, and this exact set becomes the
+      `runs-on` value when one is online (e.g. "self-hosted,docker").
+    required: false
+    default: 'self-hosted'
+  fallback-labels:
+    description: >-
+      Comma-separated labels to use as `runs-on` when no primary is available.
+    required: false
+    default: 'ubuntu-latest'
+  primaries-required:
+    description: >-
+      Minimum number of matching online primaries before the primary is chosen.
+      Raise it to keep some headroom; below this count the fallback is used.
+    required: false
+    default: '1'
+  repository:
+    description: >-
+      owner/repo whose runners to query. Defaults to the current repository.
+      Ignored when `org` is set.
+    required: false
+    default: ${{ github.repository }}
+  org:
+    description: >-
+      Organization whose runners to query. When set, org runners are queried
+      instead of a repository's.
+    required: false
+    default: ''
+
+outputs:
+  runner:
+    description: >-
+      JSON array to feed straight into a job's `runs-on` via fromJson: the
+      primary labels when available, otherwise the fallback labels.
+    value: ${{ steps.select.outputs.runner }}
+  online:
+    description: '"true" if enough matching primaries are online, else "false".'
+    value: ${{ steps.select.outputs.online }}
+  count:
+    description: 'Number of matching primaries that are currently online.'
+    value: ${{ steps.select.outputs.count }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: select
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        INPUT_PRIMARY_LABELS: ${{ inputs.primary-labels }}
+        INPUT_FALLBACK_LABELS: ${{ inputs.fallback-labels }}
+        INPUT_PRIMARIES_REQUIRED: ${{ inputs.primaries-required }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_ORG: ${{ inputs.org }}
+      run: |
+        # Any failure here (missing/invalid token, network, no match) resolves
+        # to the fallback runner so the caller never queues against a
+        # self-hosted runner that may be offline.
+
+        # Comma list -> trimmed, non-empty JSON array. jq -R on empty input
+        # emits nothing, so default the result to an empty array.
+        to_array() {
+          local out
+          out=$(printf '%s' "$1" \
+            | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length > 0))' \
+            2>/dev/null || echo '[]')
+          printf '%s' "${out:-[]}"
+        }
+
+        primary_json=$(to_array "$INPUT_PRIMARY_LABELS")
+        fallback_json=$(to_array "$INPUT_FALLBACK_LABELS")
+
+        if [ -n "$INPUT_ORG" ]; then
+          endpoint="orgs/$INPUT_ORG/actions/runners"
+          target="org $INPUT_ORG"
+        else
+          endpoint="repos/$INPUT_REPOSITORY/actions/runners"
+          target="repo $INPUT_REPOSITORY"
+        fi
+
+        # per_page=100 covers any realistic fleet in one request.
+        runners=$(gh api "$endpoint?per_page=100" 2>/dev/null || echo '{"runners":[]}')
+
+        # Count online runners carrying ALL primary labels ($labels - $have is
+        # empty only when every requested label is present on the runner).
+        count=$(printf '%s' "$runners" | jq \
+          --argjson labels "$primary_json" \
+          '[ .runners[]
+             | select(.status == "online")
+             | select([.labels[].name] as $have | ($labels - $have | length) == 0)
+           ] | length' 2>/dev/null || echo 0)
+        count=${count:-0}
+
+        required=${INPUT_PRIMARIES_REQUIRED:-1}
+        case "$required" in ''|*[!0-9]*) required=1 ;; esac
+        [ "$required" -lt 1 ] && required=1
+
+        if [ "$count" -ge "$required" ] 2>/dev/null; then
+          online=true
+          runner=$primary_json
+        else
+          online=false
+          runner=$fallback_json
+        fi
+
+        echo "Probed $target -> online primaries: $count (need $required) -> runs-on: $runner"
+        echo "runner=$runner" >> "$GITHUB_OUTPUT"
+        echo "online=$online" >> "$GITHUB_OUTPUT"
+        echo "count=$count" >> "$GITHUB_OUTPUT"

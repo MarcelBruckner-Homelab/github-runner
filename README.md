@@ -53,6 +53,129 @@ Confirm it came online:
 docker compose -f runners/<name>/docker-compose.yaml --env-file runners/<name>/.env logs -f runner
 ```
 
+## Never get stuck on an offline runner
+
+A job that targets a self-hosted runner (`runs-on: [self-hosted, docker]`)
+**queues for up to 24h** if no matching runner is online — it does not fail
+over to a GitHub-hosted runner on its own. This repo ships a Marketplace
+composite action, **Self-Hosted Runner Selector**, that decides at run time:
+it checks the runners API and hands back a `runs-on` value — your self-hosted
+labels when a matching runner is online, your fallback labels when none are.
+
+Matching is by **label** (a runner must carry *all* of the `primary-labels`),
+so it survives host-prefixed names, renames, and fleets spread across several
+machines. The same label set it probes for is the one it emits as `runs-on`, so
+availability and scheduling never drift apart.
+
+```yaml
+- id: select
+  uses: MarcelBruckner-Homelab/github-runner@v1
+  with:
+    org: <ORG_NAME>                    # or: repository: owner/repo (defaults to current)
+    primary-labels: self-hosted,docker # probed AND used as runs-on when available
+    fallback-labels: ubuntu-latest     # runs-on when no primary is online
+    token: ${{ secrets.RUNNER_CHECK_TOKEN }}
+```
+
+| Input | Default | Purpose |
+|-------|---------|---------|
+| `token` | — (required) | PAT that can read runner status (see [token scope](DEPLOYMENT.md#the-runner_check_token-read-only-pat)). |
+| `primary-labels` | `self-hosted` | Comma-separated; a runner must carry **all** of them. Becomes `runs-on` when available. |
+| `fallback-labels` | `ubuntu-latest` | Comma-separated; the `runs-on` used when no primary is online. |
+| `primaries-required` | `1` | Choose the primary only when at least this many matching runners are online. |
+| `repository` | current repo | `owner/repo` to query. Ignored when `org` is set. |
+| `org` | `''` | Organization to query instead of a repository. |
+
+Outputs: `runner` (a `fromJson`-ready `runs-on` array), `online`
+(`"true"`/`"false"`), and `count` (matching online primaries). Anything that
+goes wrong — missing token, API error, no match — resolves to the **fallback**,
+so a job never queues against an offline runner.
+
+### Wiring it into a workflow
+
+**One job, dynamic `runs-on`** — the clean default when the steps are identical
+on both runner types. Probe once, then feed `runner` into `runs-on`:
+
+```yaml
+jobs:
+  choose-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      runner: ${{ steps.select.outputs.runner }}
+    steps:
+      - id: select
+        uses: MarcelBruckner-Homelab/github-runner@v1
+        with:
+          org: <ORG_NAME>
+          primary-labels: self-hosted,docker
+          fallback-labels: ubuntu-latest
+          token: ${{ secrets.RUNNER_CHECK_TOKEN }}
+
+  build:
+    needs: choose-runner
+    runs-on: ${{ fromJson(needs.choose-runner.outputs.runner) }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
+```
+
+**Two mirror jobs** — when the self-hosted and hosted steps genuinely differ
+(different tooling, images, or licensing). Gate each on the `online` boolean and
+let downstream jobs proceed on whichever ran:
+
+```yaml
+jobs:
+  choose-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      online: ${{ steps.select.outputs.online }}
+    steps:
+      - id: select
+        uses: MarcelBruckner-Homelab/github-runner@v1
+        with:
+          org: <ORG_NAME>
+          primary-labels: self-hosted,docker
+          token: ${{ secrets.RUNNER_CHECK_TOKEN }}
+
+  build-self-hosted:
+    needs: choose-runner
+    if: needs.choose-runner.outputs.online == 'true'
+    runs-on: [self-hosted, docker]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
+
+  build-hosted:
+    needs: choose-runner
+    if: needs.choose-runner.outputs.online != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
+
+  publish:
+    needs: [build-self-hosted, build-hosted]
+    # Exactly one build job runs; proceed when that one succeeded.
+    if: >-
+      !cancelled() &&
+      (needs.build-self-hosted.result == 'success' ||
+       needs.build-hosted.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "one of the two build jobs succeeded"
+```
+
+**Targeting a specific machine or OS** is just a matter of labels: set
+`primary-labels: self-hosted,macOS,unity` to require a Mac,
+`self-hosted,Linux,docker` to require a Linux box, or `self-hosted,docker` to
+accept any runner in the fleet.
+
+The action needs a read-only PAT in `RUNNER_CHECK_TOKEN`; setup and the
+Marketplace publishing steps for maintainers are in
+[DEPLOYMENT.md](DEPLOYMENT.md#the-runner_check_token-read-only-pat).
+
 ## Managing runners
 
 **Add** a runner (run again with a new `--name` for each concurrent slot):
@@ -98,6 +221,7 @@ prune unrelated projects. Details and caveats: [DEPLOYMENT.md](DEPLOYMENT.md#dis
 ## Learn more
 
 **[DEPLOYMENT.md](DEPLOYMENT.md)** — full `register.sh` reference, ephemeral
-runners and the EPHEMERAL gotcha, disk-management internals, macOS/launchd
-specifics, and the design rationale (why Docker over bare metal, why no DNS
-workaround unlike Gitea).
+runners and the EPHEMERAL gotcha, the `RUNNER_CHECK_TOKEN` scope and Marketplace
+publishing for the [runner selector action](#never-get-stuck-on-an-offline-runner),
+disk-management internals, macOS/launchd specifics, and the design rationale
+(why Docker over bare metal, why no DNS workaround unlike Gitea).
