@@ -1,10 +1,18 @@
 # github-runner
 
+[![Pairs with self-hosted-runner-selector](https://img.shields.io/badge/pairs_with-self--hosted--runner--selector-2088FF?logo=githubactions&logoColor=white)](https://github.com/MarcelBruckner-Homelab/self-hosted-runner-selector)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Self-hosted GitHub Actions runners with **per-runner Docker-in-Docker
 isolation**, deployed via Docker Compose. Each runner gets its own Docker
 daemon, so jobs can build and run containers without touching the host or
 colliding with each other. Standalone (own network + registry mirror), runs on
 **Linux and macOS**.
+
+> 🔗 **Pairs with [`self-hosted-runner-selector`](https://github.com/MarcelBruckner-Homelab/self-hosted-runner-selector)** —
+> a companion action that routes a workflow to this fleet when it's online and
+> falls back to GitHub-hosted runners when it isn't, so jobs never queue against
+> an offline runner. See [Never get stuck on an offline runner](#never-get-stuck-on-an-offline-runner).
 
 > Deep detail, tuning, and design rationale live in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
@@ -57,57 +65,22 @@ docker compose -f runners/<name>/docker-compose.yaml --env-file runners/<name>/.
 
 A job that targets a self-hosted runner (`runs-on: [self-hosted, docker]`)
 **queues for up to 24h** if no matching runner is online — it does not fail
-over to a GitHub-hosted runner on its own. This repo ships a Marketplace
-composite action, **Self-Hosted Runner Selector**, that decides at run time:
-it checks the runners API and hands back a `runs-on` value — your self-hosted
-labels when a matching runner is online, your fallback labels when none are.
-
-Matching is by **label** (a runner must carry *all* of the `primary-labels`),
-so it survives host-prefixed names, renames, and fleets spread across several
-machines. The same label set it probes for is the one it emits as `runs-on`, so
-availability and scheduling never drift apart.
-
-```yaml
-- id: select
-  uses: MarcelBruckner-Homelab/github-runner@v1
-  with:
-    org: <ORG_NAME>                    # or: repository: owner/repo (defaults to current)
-    primary-labels: self-hosted,docker # probed AND used as runs-on when available
-    fallback-labels: ubuntu-latest     # runs-on when no primary is online
-    token: ${{ secrets.RUNNER_CHECK_TOKEN }}
-```
-
-| Input | Default | Purpose |
-|-------|---------|---------|
-| `token` | — (required) | PAT that can read runner status (see [token scope](DEPLOYMENT.md#the-runner_check_token-read-only-pat)). |
-| `primary-labels` | `self-hosted` | Comma-separated; a runner must carry **all** of them. Becomes `runs-on` when available. |
-| `fallback-labels` | `ubuntu-latest` | Comma-separated; the `runs-on` used when no primary is online. |
-| `primaries-required` | `1` | Choose the primary only when at least this many matching runners are online. |
-| `repository` | current repo | `owner/repo` to query. Ignored when `org` is set. |
-| `org` | `''` | Organization to query instead of a repository. |
-
-Outputs: `runner` (a `fromJson`-ready `runs-on` array — the whole point), plus
-`online` (`"true"`/`"false"`) and `count` (matching online primaries) if a later
-step wants to know whether it landed on self-hosted or the fallback. Anything
-that goes wrong — missing token, API error, no match — resolves to the
-**fallback**, so a job never queues against an offline runner.
-
-### Wiring it into a workflow
-
-One tiny `choose-runner` job runs the selector, then every real job
-auto-configures its own `runs-on` from the `runner` output — no duplicated jobs,
-no per-runner `if:` gates:
+over to a GitHub-hosted runner on its own. Pair this fleet with
+**[self-hosted-runner-selector](https://github.com/MarcelBruckner-Homelab/self-hosted-runner-selector)**,
+a small companion action that checks the runners API and hands back a `runs-on`
+value: your self-hosted labels when a matching runner is online, a GitHub-hosted
+fallback when none are. One tiny `choose-runner` job runs it, then every real
+job auto-configures its own `runs-on` — no duplicated jobs, no per-runner gates.
 
 ```yaml
 jobs:
   choose-runner:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
     outputs:
       runner: ${{ steps.select.outputs.runner }}
     steps:
       - id: select
-        uses: MarcelBruckner-Homelab/github-runner@v1
+        uses: MarcelBruckner-Homelab/self-hosted-runner-selector@v1
         with:
           org: <ORG_NAME>
           primary-labels: self-hosted,docker
@@ -122,19 +95,10 @@ jobs:
       - run: docker compose build
 ```
 
-**Targeting a specific machine or OS** is just a matter of labels: set
-`primary-labels: self-hosted,macOS,unity` to require a Mac,
-`self-hosted,Linux,docker` to require a Linux box, or `self-hosted,docker` to
-accept any runner in the fleet.
-
-The action needs a read-only PAT in `RUNNER_CHECK_TOKEN`; setup and the
-Marketplace publishing steps for maintainers are in
-[DEPLOYMENT.md](DEPLOYMENT.md#the-runner_check_token-read-only-pat).
-
-> **Credits:** the label-array-as-`runs-on` output model is inspired by
-> [`mikehardy/runner-fallback-action`](https://github.com/mikehardy/runner-fallback-action)
-> (MIT). This action is an independent implementation tailored to this fleet
-> (composite `gh`+`jq`, read-only token).
+`RUNNER_CHECK_TOKEN` is a **read-only** PAT (**Self-hosted runners: Read-only**
+for org runners, **Administration: Read-only** for repo runners). Full inputs,
+outputs, and setup are in the
+[action's README](https://github.com/MarcelBruckner-Homelab/self-hosted-runner-selector).
 
 ## Managing runners
 
@@ -181,7 +145,6 @@ prune unrelated projects. Details and caveats: [DEPLOYMENT.md](DEPLOYMENT.md#dis
 ## Learn more
 
 **[DEPLOYMENT.md](DEPLOYMENT.md)** — full `register.sh` reference, ephemeral
-runners and the EPHEMERAL gotcha, the `RUNNER_CHECK_TOKEN` scope and Marketplace
-publishing for the [runner selector action](#never-get-stuck-on-an-offline-runner),
-disk-management internals, macOS/launchd specifics, and the design rationale
-(why Docker over bare metal, why no DNS workaround unlike Gitea).
+runners and the EPHEMERAL gotcha, disk-management internals, macOS/launchd
+specifics, and the design rationale (why Docker over bare metal, why no DNS
+workaround unlike Gitea).

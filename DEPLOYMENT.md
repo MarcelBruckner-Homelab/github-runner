@@ -7,8 +7,6 @@ deep dive.
 ## Contents
 
 - [PATs and `.env`](#pats-and-env)
-- [The `RUNNER_CHECK_TOKEN` read-only PAT](#the-runner_check_token-read-only-pat)
-- [Publishing the selector action to the Marketplace](#publishing-the-selector-action-to-the-marketplace)
 - [`register.sh` reference](#registersh-reference)
 - [Labels: one is enough](#labels-one-is-enough)
 - [Ephemeral vs persistent runners (the EPHEMERAL gotcha)](#ephemeral-vs-persistent-runners-the-ephemeral-gotcha)
@@ -36,48 +34,10 @@ GH_PAT_MYORG=...           # a second org/owner
 `.env` (and everything under `runners/`) is gitignored — the tokens never get
 committed.
 
-## The `RUNNER_CHECK_TOKEN` read-only PAT
-
-The [Self-Hosted Runner Selector](README.md#never-get-stuck-on-an-offline-runner)
-action reads runner status through the GitHub API, so consumer repos that use
-the fallback pattern need a **separate, read-only** PAT — kept distinct from the
-registration PAT, which is read/write. Store it as the repository (or
-organization) secret `RUNNER_CHECK_TOKEN`.
-
-Scope the fine-grained PAT to just what a status read needs:
-
-- querying **organization** runners (`org:` input): **Organization permissions →
-  Self-hosted runners: Read-only**
-- querying **repository** runners (`repository:` input): **Repository permissions
-  → Administration: Read-only**
-
-The action fails safe: if the token is missing, wrong-scoped, or the API call
-errors, it resolves to the `fallback-labels` runner rather than the self-hosted
-one — the workflow never hangs. A read-only token means a leaked check secret
-can't register or remove runners.
-
-## Publishing the selector action to the Marketplace
-
-The composite action lives in `action.yml` at the repo root, which is what the
-Marketplace requires (metadata at the root; one action per repo). To publish or
-cut a new version:
-
-1. Confirm `action.yml`'s `name:` is unique across the Marketplace (it's the
-   listing name — the repo can keep the `github-runner` name; consumers still
-   reference it as `MarcelBruckner-Homelab/github-runner@<ref>`).
-2. Draft a **GitHub Release** with a semver tag (e.g. `v1.0.0`) and check
-   **"Publish this Action to the GitHub Marketplace"**, accepting the agreement
-   on the first release.
-3. Move the major-version tag so consumers can pin to `@v1`:
-
-   ```bash
-   git tag -f v1 v1.0.0
-   git push -f origin v1
-   ```
-
-Consumers pin to `@v1` (moving, gets patches) or an exact `@v1.0.0`. The action
-is pure `gh api` + `jq` (both preinstalled on GitHub-hosted runners), so there's
-no build step or bundled dependencies to ship.
+For the read-only token used by the
+[fallback selector action](README.md#never-get-stuck-on-an-offline-runner)
+(`RUNNER_CHECK_TOKEN`), see the
+[action's README](https://github.com/MarcelBruckner-Homelab/self-hosted-runner-selector#token).
 
 ## `register.sh` reference
 
