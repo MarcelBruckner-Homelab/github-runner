@@ -86,15 +86,17 @@ availability and scheduling never drift apart.
 | `repository` | current repo | `owner/repo` to query. Ignored when `org` is set. |
 | `org` | `''` | Organization to query instead of a repository. |
 
-Outputs: `runner` (a `fromJson`-ready `runs-on` array), `online`
-(`"true"`/`"false"`), and `count` (matching online primaries). Anything that
-goes wrong — missing token, API error, no match — resolves to the **fallback**,
-so a job never queues against an offline runner.
+Outputs: `runner` (a `fromJson`-ready `runs-on` array — the whole point), plus
+`online` (`"true"`/`"false"`) and `count` (matching online primaries) if a later
+step wants to know whether it landed on self-hosted or the fallback. Anything
+that goes wrong — missing token, API error, no match — resolves to the
+**fallback**, so a job never queues against an offline runner.
 
 ### Wiring it into a workflow
 
-**One job, dynamic `runs-on`** — the clean default when the steps are identical
-on both runner types. Probe once, then feed `runner` into `runs-on`:
+One tiny `choose-runner` job runs the selector, then every real job
+auto-configures its own `runs-on` from the `runner` output — no duplicated jobs,
+no per-runner `if:` gates:
 
 ```yaml
 jobs:
@@ -120,53 +122,6 @@ jobs:
       - run: docker compose build
 ```
 
-**Two mirror jobs** — when the self-hosted and hosted steps genuinely differ
-(different tooling, images, or licensing). Gate each on the `online` boolean and
-let downstream jobs proceed on whichever ran:
-
-```yaml
-jobs:
-  choose-runner:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      online: ${{ steps.select.outputs.online }}
-    steps:
-      - id: select
-        uses: MarcelBruckner-Homelab/github-runner@v1
-        with:
-          org: <ORG_NAME>
-          primary-labels: self-hosted,docker
-          token: ${{ secrets.RUNNER_CHECK_TOKEN }}
-
-  build-self-hosted:
-    needs: choose-runner
-    if: needs.choose-runner.outputs.online == 'true'
-    runs-on: [self-hosted, docker]
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker compose build
-
-  build-hosted:
-    needs: choose-runner
-    if: needs.choose-runner.outputs.online != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker compose build
-
-  publish:
-    needs: [build-self-hosted, build-hosted]
-    # Exactly one build job runs; proceed when that one succeeded.
-    if: >-
-      !cancelled() &&
-      (needs.build-self-hosted.result == 'success' ||
-       needs.build-hosted.result == 'success')
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "one of the two build jobs succeeded"
-```
-
 **Targeting a specific machine or OS** is just a matter of labels: set
 `primary-labels: self-hosted,macOS,unity` to require a Mac,
 `self-hosted,Linux,docker` to require a Linux box, or `self-hosted,docker` to
@@ -179,8 +134,7 @@ Marketplace publishing steps for maintainers are in
 > **Credits:** the label-array-as-`runs-on` output model is inspired by
 > [`mikehardy/runner-fallback-action`](https://github.com/mikehardy/runner-fallback-action)
 > (MIT). This action is an independent implementation tailored to this fleet
-> (composite `gh`+`jq`, read-only token, `online`/`count` outputs for the
-> two-mirror-job variant).
+> (composite `gh`+`jq`, read-only token).
 
 ## Managing runners
 
