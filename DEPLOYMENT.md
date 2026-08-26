@@ -8,7 +8,7 @@ deep dive.
 
 - [PATs and `.env`](#pats-and-env)
 - [The `RUNNER_CHECK_TOKEN` read-only PAT](#the-runner_check_token-read-only-pat)
-- [Publishing the probe action to the Marketplace](#publishing-the-probe-action-to-the-marketplace)
+- [Publishing the selector action to the Marketplace](#publishing-the-selector-action-to-the-marketplace)
 - [`register.sh` reference](#registersh-reference)
 - [Labels: one is enough](#labels-one-is-enough)
 - [Ephemeral vs persistent runners (the EPHEMERAL gotcha)](#ephemeral-vs-persistent-runners-the-ephemeral-gotcha)
@@ -56,7 +56,7 @@ errors, it resolves to the `fallback-labels` runner rather than the self-hosted
 one — the workflow never hangs. A read-only token means a leaked check secret
 can't register or remove runners.
 
-## Publishing the probe action to the Marketplace
+## Publishing the selector action to the Marketplace
 
 The composite action lives in `action.yml` at the repo root, which is what the
 Marketplace requires (metadata at the root; one action per repo). To publish or

@@ -1,3 +1,5 @@
+# The label-array-as-runs-on output model is inspired by
+# mikehardy/runner-fallback-action (MIT). Independent implementation.
 name: 'Self-Hosted Runner Selector'
 description: >-
   Pick a self-hosted runner when a matching one is online and fall back to a

@@ -176,6 +176,12 @@ The action needs a read-only PAT in `RUNNER_CHECK_TOKEN`; setup and the
 Marketplace publishing steps for maintainers are in
 [DEPLOYMENT.md](DEPLOYMENT.md#the-runner_check_token-read-only-pat).
 
+> **Credits:** the label-array-as-`runs-on` output model is inspired by
+> [`mikehardy/runner-fallback-action`](https://github.com/mikehardy/runner-fallback-action)
+> (MIT). This action is an independent implementation tailored to this fleet
+> (composite `gh`+`jq`, read-only token, `online`/`count` outputs for the
+> two-mirror-job variant).
+
 ## Managing runners
 
 **Add** a runner (run again with a new `--name` for each concurrent slot):
