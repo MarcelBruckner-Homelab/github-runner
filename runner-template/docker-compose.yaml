@@ -18,6 +18,22 @@ services:
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false", "--registry-mirror=http://registry-mirror:5000"]
     environment:
       DOCKER_TLS_CERTDIR: ""
+    volumes:
+      # Same host directory, same path, as the runner's own mount below. A
+      # job's compose file can bind-mount a relative path (e.g. `./report:/x`)
+      # into a container it starts — Compose resolves that to an absolute
+      # path on the *client* (this runner container) and sends it to dockerd
+      # as-is, but dockerd resolves bind-mount sources on *its own*
+      # filesystem (this dind container's). Without this mirrored mount,
+      # dockerd bind-mounts an empty directory at that path instead of the
+      # runner's actual checked-out workdir, so writes never make it back to
+      # a later step reading the same path from the runner side.
+      #
+      # Must NOT be under /tmp: docker:27-dind mounts its own tmpfs over
+      # /tmp during startup, which shadows anything bind-mounted under it at
+      # container-creation time (verified — a mount at /tmp/runner/work is
+      # silently hidden; the same mount at /runner/work is not).
+      - ./data:/runner/work
     networks:
       - github_runner_network
 
@@ -41,7 +57,8 @@ services:
       RUNNER_NAME: ${RUNNER_NAME}
       RUNNER_GROUP: ${RUNNER_GROUP:-Default}
       LABELS: ${LABELS}
-      RUNNER_WORKDIR: /tmp/runner/work
+      # Not under /tmp — see the note on the dind service's volume above.
+      RUNNER_WORKDIR: /runner/work
       DISABLE_AUTO_UPDATE: "true"
       START_DOCKER_SERVICE: "false"
       DOCKER_HOST: tcp://dind:2375
@@ -49,7 +66,7 @@ services:
       # (set to anything = ephemeral), not the value.
       EPHEMERAL: ${EPHEMERAL:-}
     volumes:
-      - ./data:/tmp/runner/work
+      - ./data:/runner/work
     networks:
       - github_runner_network
 
