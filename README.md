@@ -127,6 +127,18 @@ GitHub and clean up an orphaned entry for that name:
 ./deregister.sh <name> --scope org --org <ORG_NAME>
 ```
 
+**Add several at once** with `--count`, auto-numbered after whatever already
+exists for that name on this host (so re-running later to grow capacity
+never collides with runners already registered):
+
+```bash
+./register.sh --scope org --org <ORG_NAME> --name builder --count 4 --labels docker
+```
+
+With `my-host-builder-01`..`03` already registered, this registers
+`my-host-builder-04`..`07`. Without `--count`, `--name` is used verbatim
+(after hostname-prefixing) as a single runner, same as always.
+
 **Multiple orgs/owners:** a fine-grained PAT covers one owner, so store one
 variable per owner in `.env` (`GH_PAT`, `GH_PAT_MYORG`, …) and pick it with
 `--pat-name`:
