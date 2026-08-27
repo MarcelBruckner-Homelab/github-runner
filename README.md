@@ -127,6 +127,25 @@ GitHub and clean up an orphaned entry for that name:
 ./deregister.sh <name> --scope org --org <ORG_NAME>
 ```
 
+**Remove several at once** with `--pattern <regex>` — matches and
+deregisters every local `runners/<name>` whose name matches, no
+confirmation prompt:
+
+```bash
+./deregister.sh --pattern '^my-host-builder-'
+```
+
+Add `--scope org|repo` plus `--org`/`--repo` to *also* sweep GitHub for
+matching runners with no local trace at all (orphans from another machine,
+or already torn down here) and force-remove those too:
+
+```bash
+./deregister.sh --pattern '^my-host-builder-' --scope org --org <ORG_NAME>
+```
+
+Without `--scope`, pattern mode only ever touches local runners — it never
+queries or removes anything on GitHub for names it has no local record of.
+
 **Multiple orgs/owners:** a fine-grained PAT covers one owner, so store one
 variable per owner in `.env` (`GH_PAT`, `GH_PAT_MYORG`, …) and pick it with
 `--pat-name`:
