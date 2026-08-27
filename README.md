@@ -112,10 +112,19 @@ outputs, and setup are in the
 Names are auto-prefixed with the machine's hostname (`builder-01` →
 `my-host-builder-01`), so the same `--name` is reusable across machines.
 
-**Remove** one (de-registers from GitHub on graceful shutdown):
+**Remove** one (de-registers from GitHub on graceful shutdown, then confirms
+via the API and force-removes it if the graceful step didn't finish in time):
 
 ```bash
 ./deregister.sh <name>
+```
+
+Safe to re-run, and works even if `runners/<name>` is already gone — pass
+`--scope org|repo` plus `--org`/`--repo` explicitly and it'll still check
+GitHub and clean up an orphaned entry for that name:
+
+```bash
+./deregister.sh <name> --scope org --org <ORG_NAME>
 ```
 
 **Multiple orgs/owners:** a fine-grained PAT covers one owner, so store one
