@@ -22,10 +22,11 @@ services:
       - github_runner_network
 
   runner:
-    # ubuntu-noble (24.04), not :latest (Ubuntu 20.04/Focal) — actions/setup-python
-    # doesn't publish Python 3.14 builds for Focal, and noble matches the OS
-    # family GitHub's own ubuntu-latest hosted runners use.
-    image: myoung34/github-runner:ubuntu-noble
+    # Set via register.sh --image (default: myoung34/github-runner:ubuntu-noble).
+    # Not :latest (Ubuntu 20.04/Focal) — actions/setup-python doesn't publish
+    # Python 3.14 builds for Focal, and noble matches the OS family GitHub's
+    # own ubuntu-latest hosted runners use.
+    image: ${RUNNER_IMAGE:-myoung34/github-runner:ubuntu-noble}
     container_name: github-runner-${RUNNER_NAME}
     hostname: runner-${RUNNER_NAME}
     restart: unless-stopped

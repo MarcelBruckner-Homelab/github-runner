@@ -16,6 +16,7 @@
 #   --token <PAT>     use this PAT directly instead of reading .env at all
 #   --group <name>    runner group (org scope only, default: Default)
 #   --ephemeral       run one job then de-register (fresh container next run)
+#   --image <image>   runner image (default: myoung34/github-runner:ubuntu-noble)
 #
 # Requires a GitHub PAT in ./.env (see .env.example), one variable per org/owner
 # you register against, e.g.:
@@ -38,6 +39,7 @@ token=""
 pat_name="GH_PAT"
 group="Default"
 ephemeral=""
+image="myoung34/github-runner:ubuntu-noble"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -50,6 +52,7 @@ while [[ $# -gt 0 ]]; do
     --pat-name) pat_name="$2"; shift 2 ;;
     --group) group="$2"; shift 2 ;;
     --ephemeral) ephemeral="true"; shift 1 ;;
+    --image) image="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -103,6 +106,7 @@ REPO_URL=${repo_url}
 RUNNER_NAME=${name}
 RUNNER_GROUP=${group}
 LABELS=${labels}
+RUNNER_IMAGE=${image}
 # myoung34/github-runner checks "-n \$EPHEMERAL" (set to anything = true), not
 # its value — must be left empty rather than "false" to mean non-ephemeral.
 EPHEMERAL=${ephemeral}
