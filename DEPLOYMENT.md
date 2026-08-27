@@ -10,6 +10,7 @@ deep dive.
 - [`register.sh` reference](#registersh-reference)
 - [Labels: one is enough](#labels-one-is-enough)
 - [Ephemeral vs persistent runners (the EPHEMERAL gotcha)](#ephemeral-vs-persistent-runners-the-ephemeral-gotcha)
+- [Why the workdir isn't under /tmp](#why-the-workdir-isnt-under-tmp)
 - [Disk management](#disk-management)
 - [Running on macOS](#running-on-macos)
 - [Why Docker instead of a bare-metal install](#why-docker-instead-of-a-bare-metal-install)
@@ -102,6 +103,19 @@ left **empty**, which is why the generated `.env` and the compose template's
 substitutes the default for an *empty* value too, not just an unset one — so a
 stale per-runner compose file copied before this was fixed must be refreshed
 from the template, not just have its `.env` edited.)
+
+## Why the workdir isn't under /tmp
+
+`RUNNER_WORKDIR` and the `runner` service's volume mount both point at
+`/runner/work`, not `/tmp/runner/work` — the dind sidecar mirrors this exact
+path so a job's own bind mounts (e.g. `./report:/x` in a `services:` compose
+file) resolve to the same real host directory on both sides (see the
+mirrored-mount comment on the `dind` service). `/tmp` doesn't work for this:
+`docker:27-dind` mounts its own tmpfs directly over `/tmp` during startup,
+which shadows anything bind-mounted under it at container-creation time —
+verified by inspecting `/proc/self/mountinfo` inside the container, a mount
+at `/tmp/runner/work` is silently hidden by the later tmpfs mount at `/tmp`,
+while the same mount at `/runner/work` is untouched.
 
 ## Disk management
 
