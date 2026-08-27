@@ -119,6 +119,9 @@ via the API and force-removes it if the graceful step didn't finish in time):
 ./deregister.sh <name>
 ```
 
+No PAT setup needed for this — it reuses the `ACCESS_TOKEN` already sitting
+in `runners/<name>/.env` from when the runner was registered.
+
 Safe to re-run, and works even if `runners/<name>` is already gone — pass
 `--scope org|repo` plus `--org`/`--repo` explicitly and it'll still check
 GitHub and clean up an orphaned entry for that name:
