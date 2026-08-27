@@ -57,6 +57,7 @@ For the read-only token used by the
 | `--group <name>` | Runner group, org scope only (default `Default`). |
 | `--ephemeral` | Run one job then de-register (see the gotcha below). |
 | `--token <PAT>` | Use this PAT directly instead of reading `.env`. |
+| `--image <image>` | Runner image (default `myoung34/github-runner:ubuntu-noble`). |
 
 The final runner name is auto-prefixed with the machine's hostname (e.g.
 `--name builder-01` on host `my-host` registers as `my-host-builder-01`), so
