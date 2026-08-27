@@ -21,7 +21,11 @@
 # — every GitHub-registered runner matching the pattern with no local trace
 # at all is force-removed too. Runs immediately; no confirmation prompt.
 #
-# Requires a PAT in ./.env (same one register.sh uses) with write access:
+# The GitHub-verify step needs a write-scoped PAT. When runners/<name>
+# exists, its own .env already has one (ACCESS_TOKEN, from whatever
+# registered it) and that's reused automatically — no extra setup needed.
+# Otherwise (no local dir, or --pattern's remote sweep), pass --token, or
+# put one in ./.env (same one register.sh uses, default var name GH_PAT):
 #   org scope:  Organization permissions -> Self-hosted runners: Read and write
 #   repo scope: Repository permissions   -> Administration: Read and write
 set -euo pipefail
@@ -73,6 +77,10 @@ deregister_one() {
       repo_url="$(grep -E '^REPO_URL=' "$runner_dir/.env" | cut -d= -f2-)"
       t_repo="${repo_url#https://github.com/}"
     fi
+    # The runner's own .env already holds the PAT that registered it
+    # (ACCESS_TOKEN) — reuse it for the verify/remove step below instead of
+    # requiring a separate top-level .env or --token.
+    [[ -z "$t_token" ]] && t_token="$(grep -E '^ACCESS_TOKEN=' "$runner_dir/.env" | cut -d= -f2-)"
 
     echo "==> Stopping runner-${target} (attempts self-deregister from GitHub) and dind-${target}"
     docker compose -f "$runner_dir/docker-compose.yaml" --env-file "$runner_dir/.env" down
