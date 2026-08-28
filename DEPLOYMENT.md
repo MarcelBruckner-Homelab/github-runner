@@ -133,12 +133,21 @@ cron via `install-cron.sh`, on macOS use launchd via `install-launchd.sh` (see
 doesn't need updating as runners are added/removed. The registry-mirror volume
 is never pruned — it's the long-lived shared cache.
 
-By default `prune-dind.sh` also runs a host-level `docker system prune -af`
-after the sidecars — fine on a dedicated runner host, but on a machine you also
-develop on it wipes images/build cache/networks from unrelated projects. Pass
-`--dind-only` to prune just the `github-dind-*` sidecar caches and skip the
-host-level prune. `install-launchd.sh` uses `--dind-only` for exactly this
-reason.
+Each run is age-based, not unconditional: it only removes containers/images/
+build cache untouched for longer than `PRUNE_MAX_AGE` (default `24h`), so an
+image a job just pulled survives until the *next* job on that runner instead
+of being gone before the job even finishes with it — a full `-af` sweep every
+hour was forcing every job to re-pull its images from scratch, which had been
+adding to resource contention on small runner hosts. It escalates to an
+unconditional sweep for a target only once that target's docker data-root is
+at or above `PRUNE_DISK_THRESHOLD_PCT` (default `80`) percent full — the
+actual condition a prune is protecting against.
+
+By default `prune-dind.sh` also runs the host-level prune after the sidecars
+— fine on a dedicated runner host, but on a machine you also develop on it can
+still touch images/build cache from unrelated projects. Pass `--dind-only` to
+prune just the `github-dind-*` sidecar caches and skip the host-level prune.
+`install-launchd.sh` uses `--dind-only` for exactly this reason.
 
 ## Running on macOS
 
