@@ -61,7 +61,19 @@ services:
       RUNNER_WORKDIR: /runner/work
       DISABLE_AUTO_UPDATE: "true"
       START_DOCKER_SERVICE: "false"
-      DOCKER_HOST: tcp://dind:2375
+      # MUST be the container name, not the compose service name. Every
+      # runner pair is its own compose project but they all share the
+      # external github_runner_network, and Compose registers the service
+      # name as a network alias — so with N runners on a host there are N
+      # containers all aliased "dind" on one network, and Docker's embedded
+      # DNS round-robins between them. A runner would then talk to another
+      # runner's daemon at random: jobs building on one dind and running on
+      # another, container-name and port collisions between unrelated jobs,
+      # two jobs sharing one Postgres and deadlocking on it. Verified on
+      # github-runner-server: `getent hosts dind` in a runner returned both
+      # sidecars' IPs. The container name is unique per runner, so this
+      # can only ever reach this pair's own sidecar.
+      DOCKER_HOST: tcp://github-dind-${RUNNER_NAME}:2375
       # Must default to empty, not "false" — the image checks "-n $EPHEMERAL"
       # (set to anything = ephemeral), not the value.
       EPHEMERAL: ${EPHEMERAL:-}
