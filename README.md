@@ -24,6 +24,14 @@ each gets its own isolated Docker daemon, so concurrent jobs never collide on
 ports or container names. A shared `registry-mirror` service caches image pulls
 so only the first runner to pull an image hits the internet.
 
+That isolation rests on one detail worth knowing before you change anything:
+each runner reaches its sidecar by **container name**
+(`DOCKER_HOST=tcp://github-dind-${RUNNER_NAME}:2375`), not by the Compose
+service name. All runner pairs share one external network, and Compose
+registers the service name as a network alias on it — so `tcp://dind:2375`
+resolves to *every* sidecar on the host and round-robins between them. See
+[Per-runner isolation depends on DOCKER_HOST](DEPLOYMENT.md#per-runner-isolation-depends-on-docker_host).
+
 ## Prerequisites
 
 - **Docker** — Docker Engine (Linux) or Docker Desktop (macOS).

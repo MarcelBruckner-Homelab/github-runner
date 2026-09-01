@@ -9,6 +9,8 @@ deep dive.
 - [PATs and `.env`](#pats-and-env)
 - [`register.sh` reference](#registersh-reference)
 - [Labels: one is enough](#labels-one-is-enough)
+- [Per-runner isolation depends on DOCKER_HOST](#per-runner-isolation-depends-on-docker_host)
+- [Fresh dind state between jobs](#fresh-dind-state-between-jobs)
 - [Ephemeral vs persistent runners (the EPHEMERAL gotcha)](#ephemeral-vs-persistent-runners-the-ephemeral-gotcha)
 - [Why the workdir isn't under /tmp](#why-the-workdir-isnt-under-tmp)
 - [Disk management](#disk-management)
@@ -84,6 +86,89 @@ runner. Since every runner in this stack is built identically (same image, same
 DinD sidecar), one custom label — `docker` — is all you need to target it;
 extra labels like `linux`/`builder` add no selectivity over the auto labels.
 
+## Per-runner isolation depends on DOCKER_HOST
+
+Each runner addresses its sidecar by **container name**:
+
+```yaml
+DOCKER_HOST: tcp://github-dind-${RUNNER_NAME}:2375
+```
+
+Not `tcp://dind:2375`. This is load-bearing, and the failure it prevents is
+silent.
+
+Every runner pair is its own Compose project, but they all join the same
+external `github_runner_network`, and Compose registers each service's **name**
+as a network alias on that network. So on a host running N runners there are N
+containers all answering to the alias `dind`, and Docker's embedded DNS
+round-robins between them:
+
+```
+runner-01$ getent hosts dind
+172.21.0.5   dind     <- dind-02  (!)
+172.21.0.2   dind     <- dind-01
+```
+
+A runner would then drive a *randomly chosen* daemon, frequently not its own —
+which defeats the entire point of the sidecar design. Observed consequences
+before this was fixed:
+
+- a job building an image on one dind and failing to run it, because the next
+  call landed on the other (`No such image: myapp:latest`)
+- unrelated jobs colliding on container names and published ports
+  (`container name /myapp-db-1 is already in use`, `port 5432 already allocated`)
+- two jobs sharing one Postgres: one holding an open transaction while the
+  other's `ALTER TABLE` waited for `ACCESS EXCLUSIVE`, every later query queued
+  behind it, and both jobs hanging until timeout
+- plausibly some BuildKit `no active session ... context deadline exceeded`
+  failures — a session opened against one daemon with a follow-up call routed
+  to the other looks exactly like that
+
+It also explains why **single-runner hosts look perfectly healthy** (one dind on
+the network, alias unambiguous) and why the trouble starts the moment a second
+runner is registered.
+
+To verify a host is wired correctly, compare daemon IDs rather than trusting
+DNS — each `dockerd` reports a unique one:
+
+```bash
+docker exec github-dind-<name> docker -H tcp://localhost:2375 info --format '{{.ID}}'
+docker exec github-runner-<name> docker info --format '{{.ID}}'
+# these two must match, for every runner on the host
+```
+
+The ambiguous `dind` alias still exists — Compose always registers it — but
+nothing resolves it any more.
+
+## Fresh dind state between jobs
+
+`job-completed-hook.sh` runs after **every** job, pass or fail, via the runner's
+native `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` support. It force-removes every
+container and prunes unused networks on that runner's own dind, so the next job
+starts from an empty daemon.
+
+This exists because dind is shared across every job scheduled onto a runner
+slot and is *not* recreated between them, even with `--ephemeral` (which
+recycles only the runner container — see the next section). A job that fails
+before reaching its own cleanup, or whose `docker compose down` silently fails
+to actually stop something, would otherwise leave containers that block the
+next job on a port or a name — including a job from a completely different
+workflow.
+
+Images and build cache are deliberately **not** touched (no `system prune`), so
+builds stay warm across jobs; disk is handled separately by the hourly prune
+(see [Disk management](#disk-management)).
+
+`register.sh` copies the hook into each `runners/<name>/` directory and the
+compose template mounts it read-only, so it needs no setup. You can confirm it
+is running from a job's own log on GitHub:
+
+```
+A job completed hook has been configured by the self-hosted runner administrator
+==> job-completed-hook: clearing dind (DOCKER_HOST=tcp://github-dind-...:2375)
+==> job-completed-hook: done
+```
+
 ## Ephemeral vs persistent runners (the EPHEMERAL gotcha)
 
 Pass `--ephemeral` to `register.sh` for a runner that de-registers after one
@@ -91,8 +176,11 @@ job — worth it for anything that might see untrusted/fork-PR code. It
 self-sustains via `restart: unless-stopped`: the runner process exits after a
 job, the container restarts, and the entrypoint re-registers fresh with
 `--replace`. Note the `dind` sidecar is *not* recycled on that cycle — only the
-runner container restarts — so a job's Docker layers can still be visible to
-the next job on the same daemon even with `--ephemeral`.
+runner container restarts — so a job's Docker **layers** can still be visible to
+the next job on the same daemon even with `--ephemeral`. Leftover *containers*
+and networks are handled separately, by the job-completed hook (see
+[Fresh dind state between jobs](#fresh-dind-state-between-jobs)); images and
+build cache are intentionally kept so builds stay warm.
 
 **The gotcha:** `myoung34/github-runner`'s entrypoint checks `-n "$EPHEMERAL"`
 — i.e. *is the variable set to anything* — not its value. So `EPHEMERAL=false`
