@@ -142,6 +142,8 @@ for runner_name in "${names[@]}"; do
   echo "==> Creating $runner_dir"
   mkdir -p "$runner_dir/data"
   cp runner-template/docker-compose.yaml "$runner_dir/docker-compose.yaml"
+  cp job-completed-hook.sh "$runner_dir/job-completed-hook.sh"
+  chmod +x "$runner_dir/job-completed-hook.sh"
 
   cat > "$runner_dir/.env" <<EOF
 ACCESS_TOKEN=${token}

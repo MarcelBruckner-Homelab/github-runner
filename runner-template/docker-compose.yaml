@@ -65,8 +65,18 @@ services:
       # Must default to empty, not "false" — the image checks "-n $EPHEMERAL"
       # (set to anything = ephemeral), not the value.
       EPHEMERAL: ${EPHEMERAL:-}
+      # Runs after every job (success or failure), before the runner goes
+      # back to "Listening for Jobs". Force-clears every container/network
+      # on this runner's own dind — see job-completed-hook.sh for why: dind
+      # is shared across every job scheduled onto this slot and is never
+      # recreated between jobs, so a job whose own cleanup fails (or whose
+      # `docker compose down` silently fails to actually stop something)
+      # would otherwise leave state a *later* job — of any workflow, on
+      # this same slot — can collide with on a port or container name.
+      ACTIONS_RUNNER_HOOK_JOB_COMPLETED: /runner-scripts/job-completed-hook.sh
     volumes:
       - ./data:/runner/work
+      - ./job-completed-hook.sh:/runner-scripts/job-completed-hook.sh:ro
     networks:
       - github_runner_network
 
