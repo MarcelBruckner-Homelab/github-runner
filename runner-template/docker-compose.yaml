@@ -10,7 +10,7 @@
 # for act_runner.
 services:
   dind:
-    image: docker:27-dind
+    image: docker:29-dind
     container_name: github-dind-${RUNNER_NAME}
     hostname: dind-${RUNNER_NAME}
     restart: unless-stopped
@@ -29,7 +29,7 @@ services:
       # runner's actual checked-out workdir, so writes never make it back to
       # a later step reading the same path from the runner side.
       #
-      # Must NOT be under /tmp: docker:27-dind mounts its own tmpfs over
+      # Must NOT be under /tmp: docker:NN-dind mounts its own tmpfs over
       # /tmp during startup, which shadows anything bind-mounted under it at
       # container-creation time (verified — a mount at /tmp/runner/work is
       # silently hidden; the same mount at /runner/work is not).
