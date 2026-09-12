@@ -3,6 +3,21 @@ services:
     image: registry:2
     container_name: github-runner-registry-mirror
     restart: unless-stopped
+    # /v2/ is the Docker Registry API's version endpoint and returns 200 from
+    # a working registry. wget is present (alpine busybox); curl is not.
+    #
+    # Only registry-mirror gets a probe in this file: the runner and dind
+    # containers are created and destroyed per CI job, where a health state
+    # is noise by construction.
+    #
+    # Docker does NOT restart an unhealthy container: `unless-stopped` reacts
+    # to a container *exiting*, never to a failing healthcheck.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:5000/v2/"]
+      interval: 60s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     environment:
       REGISTRY_PROXY_REMOTEURL: https://registry-1.docker.io
     volumes:
