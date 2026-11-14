@@ -1,3 +1,8 @@
+# Pinned so the project keeps its name wherever this repo is checked out:
+# register.sh runs a bare `docker compose up -d` here, and Compose would
+# otherwise name the project after the directory (homelab deploys this repo
+# to /opt/docker/github-runner/runner/).
+name: github-runner
 services:
   registry-mirror:
     image: registry:2
